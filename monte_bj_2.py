@@ -29,6 +29,7 @@ class BlackjackAgent(object):
         self.action_space = action_space
         self.action_space_side = side_space
         self.nA = action_space.n
+        self.nA_side = side_space.n
         self.epsilon_decay = epsilon_decay
 
         # initialize Q value and N count dictionaries
@@ -65,36 +66,34 @@ class BlackjackAgent(object):
         best_a = np.argmax(Q_s)
         policy_s[best_a] = 1 - epsilon + (epsilon / self.nA)
         return policy_s
+        
+    def get_policy_for_observation_side(self, Q_s, epsilon):
+        """ calculates the action probabilities corresponding to epsilon-greedy policy """
+        policy_s = np.ones(self.nA_side) * epsilon / self.nA_side
+        best_a = np.argmax(Q_s)
+        policy_s[best_a] = 1 - epsilon + (epsilon / self.nA_side)
+        return policy_s
 
     def choose_action(self, observation, epsilon):
         """ if observation in Q dict, choose random action with probability of eps otherwise sample from action space """
             
-        obs = (observation[0], observation[1], observation[2])
-        pol = self.Q
-
         if observation in self.Q:
-            a = np.random.choice(np.arange(self.nA))
-            p = self.get_policy_for_observation(self.Q[observation], epsilon)
-
-            action = np.argmax(p)
-    
-
+            action = np.random.choice(np.arange(self.nA), p=self.get_policy_for_observation(self.Q[observation], epsilon))
         else:
             action = self.action_space.sample()
-
         return action
+
+        
 
     def choose_side_bet(self, observation, epsilon):
         if observation in self.Q_side:
-            rand = np.random.random()
-            if rand < 1 - epsilon:
-                Q_s = self.Q_side[observation]
-                p = self.get_policy_for_observation(Q_s, epsilon)
-                action = np.argmax(p)
-                return action
+            action = np.random.choice(np.arange(self.nA_side), p=self.get_policy_for_observation_side(self.Q_side[observation], epsilon))
+        else:
+            action = self.action_space_side.sample()
+        return action
 
 
-        return self.action_space_side.sample()
+        
 
     def update_action_val_function(self, episode):
         """ updates the action-value function Q and N count dictionaries for every observation in one episode """
@@ -105,6 +104,8 @@ class BlackjackAgent(object):
             old_N = self.N[observation][actions[i]]
             self.Q[observation][actions[i]] = old_Q + (sum(rewards[i:]*discounts[:-(1+i)]) - old_Q)/(old_N+1)
             self.N[observation][actions[i]] += 1
+
+        
 
     def update_side_val_function(self, episode):
         """ updates the action-value function Q and N count dictionaries for every observation in one episode """
@@ -236,7 +237,7 @@ def learn(base_dir='honours 3', num_episodes=100000, epsilon=1):
     eps_decay = 1 / num_episodes
     print (eps_decay)
 
-    rewards = np.zeros(num_episodes)
+    rewards = np.zeros(num_episodes)                                                                                    
     total_rewards = 0
 
     for i in range(num_episodes):
@@ -252,7 +253,7 @@ def learn(base_dir='honours 3', num_episodes=100000, epsilon=1):
         X = episode
         total_rewards += episode[len(episode) - 1][2]
         rewards[i] = total_rewards 
-        epsilon -= 1e-6
+        epsilon -= 0.5e-7
 
     # obtain the policy from the action-value function
     # e.g. generate  ((4, 7, False), 1)   HIT      ((18, 6, False), 0)  STICK
@@ -261,7 +262,7 @@ def learn(base_dir='honours 3', num_episodes=100000, epsilon=1):
     env.close()
 
 
-    return policy, agent.Q, agent.Q_side, rewards, agent.chips, side_bets
+    return policy, agent.Q, agent.Q_side, rewards, agent.chips, side_bets, agent.N
 
 def choose_action_by_policy(action_space, policy, observation):
     """ selects action based on trained policy """
@@ -280,7 +281,8 @@ def score(policy, side, num_episodes):
     agent.Q_side = side
     rewards = []
     total_rewards = 0
-    chips = 10000
+    side_bet_rewards = 0
+    chips = 1000000
     num_episodes = num_episodes // 10
     for _ in range(num_episodes):
         observation = env.reset()
@@ -291,11 +293,12 @@ def score(policy, side, num_episodes):
         total_rewards += episode[len(episode) - 1][2]
         chips += reward
         
-        rewards.append(total_rewards)
+        rewards.append(reward)
+        side_bet_rewards += side[2][0] - side[1][0]
             
     env.close()
-
-    return rewards, chips
+    print ("total rewards:", total_rewards, "side rewards", side_bet_rewards)
+    return rewards, chips, num_episodes
 
 def plot_policy(policy, plot_filename="plot.png"):
 
@@ -340,7 +343,7 @@ def plot_policy(policy, plot_filename="plot.png"):
 
 
     def get_figure():
-        titles = ['No Usable Ace', 'Usable Ace', 'No Usable Ace  (Double)', 'No Usable Ace (Double)']
+        titles = ['No Usable Ace', 'Usable Ace', 'No Usable Ace  (Double)', 'Usable Ace (Double)']
 
         x_range = np.arange(1, 11)
         y_range = np.arange(11, 22)
@@ -375,7 +378,7 @@ def plot_policy(policy, plot_filename="plot.png"):
                     num_actions = 3
                 else:
                     num_actions = 2
-                surf = ax[x, y].imshow(Z, cmap=plt.get_cmap('Accent', 3), vmin=0, vmax=3 - 1, extent=[1.0, 10.5, 10.5, 21.0])
+                surf = ax[x, y].imshow(Z, cmap=plt.get_cmap('Accent', 3), vmin=0, vmax=3 - 1, extent=[1.0, 11.0, 11.0, 21.0])
                 plt.setp(ax, xticks=x_range, xticklabels=('A', '2', '3', '4', '5', '6', '7', '8', '9', '10'), yticks=y_range)
                 
 
@@ -417,13 +420,28 @@ def main():
     elif args.verbosity >= 1:
         logger.setLevel(logging.DEBUG)
     
-    num_episodes = 1000000
+    num_episodes = 20000000
     epsilon = 1
 
 
-    policy, Q, Q_side, rewards, chips, side_bets = learn(args.base_dir, num_episodes, epsilon)
+    policy, Q, Q_side, rewards, chips, side_bets, N = learn(args.base_dir, num_episodes, epsilon)
 
-    final_average_return, chips = score(policy, Q_side, num_episodes)
+    rewards_, chips, num_episodes_score = score(policy, Q_side, num_episodes)
+
+    win = 0
+    lose = 0
+    draw = 0
+    for reward in rewards_:
+        if reward >= 1:
+            win += 1
+        elif reward == 0:
+            draw += 1
+        elif reward <= 0:
+            lose += 1
+    print(win, num_episodes_score)
+    win_rate = float(win) / num_episodes_score
+    print (win, draw, lose, win_rate)
+    print("win rate:", win_rate* 100, "draw rate:", float(draw) / num_episodes_score * 100, "lose rate:", float(lose) / num_episodes_score * 100)
     path = "C:/Users/drp3p/Desktop/honours_3/"
     dir_out = "{}_results".format(str(datetime.datetime.now()).replace(' ', '_').replace('.', ':').replace(':', '-'))
 
@@ -438,22 +456,27 @@ def main():
     write = open("val_func.txt", 'w')
     write.write(str(Q))
     write.close()
+    write = open("N.txt", "w")
+    write.write(str(N))
+    write.close()
 
     #plt.yscale('log')
-    plt.plot(final_average_return)
+    plt.plot(rewards_)
     print("chips: ", chips)
-    #plt.plot(final_average_return)
+    #plt.plot(rewards_)
 
     #plt.plot(Q_side)
     
     #plt.show()
-    #logger.info("final average returns: {}".format(final_average_return))
+    #logger.info("final average returns: {}".format(rewards_))
 
     plot_policy(policy, "diag_{}_{}_{}.png".format(num_episodes, epsilon, 0))
     
     write = open("side_bets.txt", 'w')
     write.write(str(side_bets))
     write.close()
+
+    write = open("policy.txt", "w")
 
 
     return 0

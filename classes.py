@@ -77,6 +77,7 @@ class Deck:
         shoe.deck_cards.append(cut_card)
         shoe.shuffle_deck()
         self.deck_cards = shoe.deck_cards
+        self.last_hand = False
 
     def shuffle_deck(self):
         random.shuffle(self.deck_cards)
@@ -94,10 +95,11 @@ class Deck:
         if temp_card.cut:
             if len(self.deck_cards) > 0:
                 temp_card = self.deck_cards.pop(0)
+                self.last_hand = True
             else:
                 self.gen_shoe()
                 return self.get_card()
-            self.last_hand
+            
 
         """ updates deck count as cards are dealt
             cards 2-6  : +1

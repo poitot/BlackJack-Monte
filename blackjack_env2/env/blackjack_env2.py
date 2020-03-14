@@ -12,9 +12,6 @@ import numpy as np
 
 class BlackjackEnv(gym.Env):
 
-    def init(self):
-        self.deck_count = 0
-
     def cmp(self, a, b):
         return float(a > b) - float(a < b)
     
@@ -108,6 +105,8 @@ class BlackjackEnv(gym.Env):
 
         self.deck = Deck()
 
+        self.deck.count = 0
+
         # Start the first game
         self.reset()
 
@@ -128,14 +127,20 @@ class BlackjackEnv(gym.Env):
             else:
                 done = False
                 reward = 0
+
         elif action == 0:  # stick: play out the dealers hand, and score
             done = True
 
             while sum(self.dealerHand.getValues()) < 17:
                 self.dealerHand.cards.append(self.draw_card(self.np_random))
             reward = self.cmp(self.score(self.playerHand), self.score(self.dealerHand))
-            if self.natural and is_natural(playerHand) and reward == 1:
-                reward = 1.5
+        
+            if self.is_natural(self.playerHand) and reward == 1:
+                if self.is_natural(self.dealerHand):
+                    # Push - original bet returned
+                    reward = 0
+                # natural blackjack pays out 3/2
+                reward = 1
 
         elif action == 2: # double: double bet and dealt a final card
 
@@ -143,7 +148,7 @@ class BlackjackEnv(gym.Env):
             self.sum_hand(self.playerHand)
 
             if self.is_bust(self.playerHand):
-                reward = -2 
+                reward = -2
             else:
                 while sum(self.dealerHand.getValues()) < 17:
                     self.dealerHand.cards.append(self.draw_card(self.np_random))
@@ -180,5 +185,6 @@ class BlackjackEnv(gym.Env):
         self.sum_hand(self.playerHand)
         
         if (self.deck.last_hand):
-            self.deck = deck.gen_shoe()
+            self.deck.gen_shoe()
+            
         return self._get_obs()

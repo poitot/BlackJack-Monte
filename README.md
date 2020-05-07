@@ -1,5 +1,5 @@
 # BlackJack-Monte
-Project created for honours disseretaion using reinforcement learning to play black jack including side betting using modified version of the Open AI Gym Blackjack enviroment 
+Project created for honours dissertation using reinforcement learning to play black jack including side betting using modified version of the Open AI Gym Blackjack enviroment 
 
 Created to explore using reinforcement learning to determine a blackajck strategy using side bets
 

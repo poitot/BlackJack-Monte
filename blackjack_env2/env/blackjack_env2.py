@@ -14,14 +14,19 @@ class BlackjackEnv(gym.Env):
 
     def cmp(self, a, b):
         return float(a > b) - float(a < b)
-    
 
-    def draw_card(self, np_random):
+    def draw_card_(self, card):
+        c = self.deck.get_card_(card)
+        return c
+
+    def draw_card(self):
         card = self.deck.get_card()
         return card
 
 
-    def draw_hand(self, np_random):
+
+
+    def draw_hand(self):
         h = Hand()
         h.cards = [self.deck.get_card(), self.deck.get_card()]
         h.usableAce = self.usable_ace(h)
@@ -30,16 +35,15 @@ class BlackjackEnv(gym.Env):
 
     def usable_ace(self, hand):  # checks hands for a usable ace? **
         h_values = hand.getValues()
-        if 1 in h_values and sum(h_values) + 10 <= 21:
-            hand.usableAce = True
-            return True
-
-        else:
-            hand.usableAce = False
-            return False
+        for c in hand.cards:
+            if c.name == "Ace":
+                if sum(h_values) + 10 <= 21:
+                    hand.usableAce = True
+                    return True
 
 
-
+        hand.usableAce = False
+        return False
 
     def sum_hand(self, hand):  # Return current hand total **
         if self.usable_ace(hand):
@@ -90,7 +94,7 @@ class BlackjackEnv(gym.Env):
     by Sutton and Barto.
     http://incompleteideas.net/book/the-book-2nd.html
     """
-    def __init__(self, natural=False):
+    def __init__(self, natural=False, deck_num=1):
         self.action_space = spaces.Discrete(3)
         self.side_space = spaces.Discrete(2)
         self.observation_space = spaces.Tuple((
@@ -103,7 +107,7 @@ class BlackjackEnv(gym.Env):
         # Ref: http://www.bicyclecards.com/how-to-play/blackjack/
         self.natural = natural
 
-        self.deck = Deck()
+        self.deck = Deck(dn=1)
 
         self.deck.count = 0
 
@@ -119,7 +123,7 @@ class BlackjackEnv(gym.Env):
         reward = 0
             
         if action == 1:  # hit: add a card to players hand and return
-            self.playerHand.cards.append(self.draw_card(self.np_random))
+            self.playerHand.cards.append(self.draw_card())
             self.sum_hand(self.playerHand)
             if self.is_bust(self.playerHand):
                 done = True
@@ -132,7 +136,7 @@ class BlackjackEnv(gym.Env):
             done = True
 
             while sum(self.dealerHand.getValues()) < 17:
-                self.dealerHand.cards.append(self.draw_card(self.np_random))
+                self.dealerHand.cards.append(self.draw_card())
             reward = self.cmp(self.score(self.playerHand), self.score(self.dealerHand))
         
             if self.is_natural(self.playerHand) and reward == 1:
@@ -140,20 +144,22 @@ class BlackjackEnv(gym.Env):
                     # Push - original bet returned
                     reward = 0
                 # natural blackjack pays out 3/2
-                reward = 1
+                reward = 1.5
 
         elif action == 2: # double: double bet and dealt a final card
 
-            self.playerHand.cards.append(self.draw_card(self.np_random)) 
+            self.playerHand.cards.append(self.draw_card()) 
             self.sum_hand(self.playerHand)
+
+
+            while sum(self.dealerHand.getValues()) < 17:
+                self.dealerHand.cards.append(self.draw_card())
 
             if self.is_bust(self.playerHand):
                 reward = -2
             else:
-                while sum(self.dealerHand.getValues()) < 17:
-                    self.dealerHand.cards.append(self.draw_card(self.np_random))
-                    reward = self.cmp(self.score(self.playerHand), self.score(self.dealerHand))
-                    reward *= 2
+                reward = self.cmp(self.score(self.playerHand), self.score(self.dealerHand))
+                reward *= 2
             done = True
 
         elif action == "3": # split: split hand
@@ -161,11 +167,6 @@ class BlackjackEnv(gym.Env):
             # check for pair before calling
             self.player.append([self.player[0][1]])
             self.player.remove(self.player[0][1])
-
-
-
-
-
 
         return self._get_obs(), reward, done, 0
 
@@ -175,16 +176,73 @@ class BlackjackEnv(gym.Env):
 
     def get_hands(self):
         return self.playerHand, self.dealerHand
+
+    def get_hand_cards(self):
+        return self.playerHand.cards + [self.dealerHand.cards[0]]
         
     def reset(self):
-        self.dealerHand = self.draw_hand(self.np_random)
+        if (self.deck.last_hand or self.deck.deck_cards.count == 0):
+            self.deck.gen_shoe()
+
+        self.dealerHand = self.draw_hand()
         self.usable_ace(self.dealerHand)
 
-        self.playerHand = self.draw_hand(self.np_random)
+        self.playerHand = self.draw_hand()
         self.usable_ace(self.playerHand)
-        self.sum_hand(self.playerHand)
+        psum = self.sum_hand(self.playerHand)
         
-        if (self.deck.last_hand):
-            self.deck.gen_shoe()
             
         return self._get_obs()
+
+    def reset_(self):
+        self.deck.deck_cards + self.playerHand.cards
+        self.deck.deck_cards + self.dealerHand.cards
+        self.deck.shuffle_deck()
+        self.playerHand = self.draw_hand()
+        self.dealerHand = self.draw_hand()
+
+        return self._get_obs()
+
+    def deck_by_count(self, count):
+        self.deck.gen_shoe()
+        while True:
+            c1_deck, c2_deck = self.deck.count_suits
+            c1_deck //= self.deck.num_decks
+            c2_deck //= self.deck.num_decks
+            if tuple([c1_deck, c2_deck]) == count and self.deck.count < (52 * self.deck.num_decks // 2):
+                return
+            else:
+                c1, c2 = zip(count)
+                #c1_deck, c2_deck = zip(self.deck.count_suits)
+                # check clubs & heart count and adjust
+                c1 = c1[0]
+                c2 = c2[0]
+                if c1 > c1_deck:
+                    temp = [card for card in self.deck.deck_cards if card.suit == self.deck.suits[0]]
+                    if len(temp) == 0:
+                        self.deck.gen_shoe()
+                        continue
+                    self.draw_card_(np.random.choice(temp))
+
+                if c1 < c1_deck:
+                    temp = [card for card in self.deck.deck_cards if card.suit == self.deck.suits[1]]
+                    if len(temp) == 0:
+                        self.deck.gen_shoe()
+                        continue
+                    self.draw_card_(np.random.choice(temp))
+
+                if c2 > c2_deck:
+                    temp = [card for card in self.deck.deck_cards if card.suit == self.deck.suits[2]]
+                    if len(temp) == 0:
+                        self.deck.gen_shoe()
+                        continue
+                    self.draw_card_(np.random.choice(temp))
+
+                if c2 < c2_deck:
+                    temp = [card for card in self.deck.deck_cards if card.suit == self.deck.suits[3]]
+                    if len(temp) == 0:
+                        self.deck.gen_shoe()
+                        continue
+                    self.draw_card_(np.random.choice(temp))
+
+                

@@ -101,13 +101,13 @@ class BlackjackEnv(gym.Env):
             spaces.Discrete(32),
             spaces.Discrete(11),
             spaces.Discrete(2)))
-        self.seed()
+        self.seed(0)
 
         # Flag to payout 1.5 on a "natural" blackjack win, like casino rules
         # Ref: http://www.bicyclecards.com/how-to-play/blackjack/
         self.natural = natural
 
-        self.deck = Deck(dn=1)
+        self.deck = Deck()
 
         self.deck.count = 0
 

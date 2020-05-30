@@ -102,7 +102,7 @@ class BlackjackAgent(object):
         for i, observation in enumerate(observations):
             old_Q = self.Q[observation][actions[i]]
             old_N = self.N[observation][actions[i]]
-            self.Q[observation][actions[i]] = old_Q + (sum(rewards[i:]*discounts[:-(1+i)]) - old_Q)/(old_N+1)
+            self.Q[observation][actions[i]] = old_Q + (sum(rewards[i:]) - old_Q)/(old_N+1)
             self.N[observation][actions[i]] += 1
 
         
@@ -228,35 +228,35 @@ class BlackjackAgent(object):
         self.chips += reward + side_bet_winnings
         return episode, ([env.deck.count], [side_bet], [side_bet_winnings]), self.side_bets
 
-def learn(base_dir='honours 3', num_episodes=100000, epsilon=1):
+def learn(base_dir='BLACKJACK-MONTE', num_episodes=100000, epsilon=5):
+
     env = gym.make('blackjack-v2')
     env = wrappers.Monitor(env, directory=base_dir, force=True, video_callable=False)
 
     agent = BlackjackAgent(env.action_space, env.side_space, epsilon)
 
     eps_decay = 1 / num_episodes
-    print (eps_decay)
 
     rewards = np.zeros(num_episodes)                                                                                    
     total_rewards = 0
 
     for i in range(num_episodes):
-        if i % 1000 == 0:
+        if i % 10000 == 0:
             logger.debug('\rEpisode {}/{}.'.format(i, num_episodes))
             print('\rEpisode {}/{}.'.format(i, num_episodes), epsilon)
         
-        side_bet = agent.choose_side_bet(env.deck.count, epsilon)
-        episode, side, side_bets = agent.generate_episode(env, side_bet)
-        
+        #side_bet = agent.choose_side_bet(env.deck.count, epsilon)
+        #episode, side, side_bets = agent.generate_episode(env, side_bet)
+        episode, side, side_bets = agent.generate_episode(env, 0)
         agent.update_action_val_function(episode)
-        agent.update_side_val_function(side)
+        #agent.update_side_val_function(side)
         X = episode
         total_rewards += episode[len(episode) - 1][2]
         rewards[i] = total_rewards 
-        epsilon -= 0.5e-7
+        epsilon -= eps_decay
 
     # obtain the policy from the action-value function
-    # e.g. generate  ((4, 7, False), 1)   HIT      ((18, 6, False), 0)  STICK
+    # e.g. generate ((18, 6, False), 0)  STICK  ((4, 7, False), 1)   HIT   ((12, 10, False), 2) DOUBLE
     policy = dict((k, np.argmax(v)) for k, v in agent.Q.items())
 
     env.close()
@@ -365,7 +365,7 @@ def plot_policy(policy, plot_filename="plot.png"):
 
                 usable_ace = x
                 double = y
-                Z = np.array([[get_Z(player_hand, dealer_showing, usable_ace) for dealer_showing in x_range] for player_hand in range(21, 11, -1)])
+                Z = np.array([[get_Z(player_hand, dealer_showing, usable_ace) for dealer_showing in x_range] for player_hand in y_range])
 
                 if not(double):
                     for i in range(10):
@@ -420,7 +420,7 @@ def main():
     elif args.verbosity >= 1:
         logger.setLevel(logging.DEBUG)
     
-    num_episodes = 20000000
+    num_episodes = 100000
     epsilon = 1
 
 
